@@ -1,0 +1,200 @@
+#+Title: Vôo de Pássaro: Polysemy, um Sistema de Efeitos
+#+Author: Thales Macedo Garitezi
+
+#+Startup: showeverything
+
+# ,#+REVEAL_ROOT: https://cdn.jsdelivr.net/npm/reveal.js@3.8.0
+#+REVEAL_ROOT: file:///home/thales/Downloads/reveal.js-3.8.0/
+#+REVEAL_THEME: black
+#+REVEAL_MIN_SCALE: 0.3
+#+REVEAL_MAX_SCALE: 2.5
+#+REVEAL_EXTRA_CSS: ./style.css
+#+OPTIONS: toc:1
+
+* Sistemas de efeitos
+
+** O que são efeitos?
+
+- Contexto :: programação funcional.
+- Expressão Pura :: transparência referencial.
+- Efeito :: modifica o estado do "mundo"
+
+#+REVEAL: split
+
+#+NAME: fig:st_monad_1
+[[./images/st_monad_1.png]]
+
+#+NAME: fig:st_monad_2
+[[./images/st_monad_2.png]]
+
+** Exemplos de efeitos
+
+- Ler/escrever no terminal
+- Log
+- Exceções
+- Continuações/alterar fluxo de execução
+
+** Sistema de efeitos?
+
+- Uma maneira de lidar com efeitos computacionais (/efeitos impuros/)
+- Baseada na premissa de que a impureza advém de um conjunto de operações
+  - Ex: ~get~, ~set~, ~write~, ~raise~ [fn:2]
+- Também: /algebraic effects/ ou /extensible effects/.[fn:1] [fn:3]
+
+[fn:1] http://hackage.haskell.org/package/fused-effects
+[fn:2] https://www.eff-lang.org/handlers-tutorial.pdf
+[fn:3] http://okmij.org/ftp/Haskell/extensible/exteff.pdf
+
+** Para quê?
+
+- Controle de efeitos colaterais.
+- Separa as ações a serem feitas (/sintaxe/) da interpretação (/semântica/).
+  - Facilita testes unitários.
+  - Desejável: fácil composição.
+- Tipos: controle de quais efeitos são permitidos e tratados.
+
+* "Efeitos tradicionais" em Haskell
+
+#+BEGIN_SRC haskell
+data Maybe a = Just a | Nothing -- Exceções / nulo
+data Either e a = Left e | Right a -- Exceções com "mensagens"
+data List a = Nil | Cons a (List a) -- Não determinismo
+
+-- Outros exemplos: estado, log, variáveis de ambiente, ...
+#+END_SRC
+
+** Como compõem?
+
+/Monad transformers/
+
+#+BEGIN_SRC haskell
+-- Estado + Variáveis de ambiente somente leitura + exceções
+ExceptT MyError (ReaderT MyEnvironment (StateT MyState IO)) a
+#+END_SRC
+
+#+REVEAL: split
+
+Funcionamento depende fortemente da ordem de composição.
+
+#+BEGIN_SRC haskell
+newtype ExceptT e m a -- ~> m (Either e a)
+newtype StateT s m a -- ~>  s -> m (a, s)
+
+ExceptT e (StateT s m) a -- Mantém o estado no caso de exceção
+-- ~ s -> m ((Either e a), s)
+
+StateT s (ExceptT e m) a -- Joga tudo fora se houver uma exceção
+-- ~ s -> m (Either e (a, s))
+#+END_SRC
+
+#+REVEAL: split
+
+Vide [[./src/ExMTL.hs]]
+
+#+REVEAL: split
+
+- Existe também o estilo MTL (/Monad Transformer Library/)
+- Usa /Typeclasses/
+- Problema: número grande de re-implementações de classes para cada monad novo que usa.
+
+#+REVEAL: split
+
+Outros problemas:
+- Dificuldade em testar.
+  - Precisa implementar mais várias instâncias para emular os efeitos...
+- Dificuldade / impossibilidade de usar múltiplas instâncias do mesmo efeito (múltiplos ambientes somente leitura, exceções, ...)
+
+* Sistema de efeitos
+
+- Costumam ser implementados como bibliotecas.
+- Algumas linguagens têm foco em efeitos algebraicos.
+  - Ex: Koka[fn:4], Eff[fn:5], OCaml (?)[fn:6]
+
+[fn:4] https://www.eff-lang.org/
+[fn:5] https://www.microsoft.com/en-us/research/project/koka/
+[fn:6] https://github.com/ocaml-multicore/ocaml-multicore/wiki
+
+** (Pseudo-)Exemplo: Ações
+
+#+BEGIN_SRC haskell
+example :: Members '[ Log String
+                    , KVStore
+                    , Output String
+                    , Input String
+                    ]
+                    r -- Pode conter mais efeitos
+        => Sem r ()
+example = do
+  log "Starting up..."
+  writeTTY "Please enter your name and age:"
+  [name, age] <- words <$> readTTY
+  log "Writing data to store..."
+  putKV name age
+  writeTTY ("Welcome, " <> name <> "!")
+#+END_SRC
+
+** (Pseudo-)Exemplo: Interpretações
+
+#+BEGIN_SRC haskell
+runInputList :: [i]
+             -> Sem (Input (Maybe i) ': r) a
+             -> Sem r a
+runOutputList :: forall o r a. Sem (Output o ': r) a
+              -> Sem r ([o], a)
+runKVStoreMap :: Map String String
+              -> Sem (Database ': r)
+              -> Sem r (Map String String)
+...
+
+runMyExamplePure inputs emptyMap
+  = runInputList inputs
+  . runOutputList
+  . runKVStoreMap emptyMap
+  ...
+#+END_SRC
+
+* Bibliotecas de Efeitos em Haskell
+
+- ~fused-effects~
+- ~freer-simple~
+- Free Monads
+
+* Polysemy
+
+#+NAME: img:polysemy_logo
+[[./images/polysemy.png]]
+
+#+REVEAL: split
+
+- /It's like mtl but composes better, requires less boilerplate, and avoids the O(n^2) instances problem./
+- /It's like freer-simple but more powerful and 35x faster./
+- /It's like fused-effects but with an order of magnitude less boilerplate./
+
+/Additionally, unlike mtl, polysemy has no functional dependencies, so you can use multiple copies of the same effect./
+
+https://github.com/polysemy-research/polysemy
+
+** Exemplos
+
+[[./src/Ex1.hs]]
+
+[[./src/Ex2.hs]]
+
+** Mais um exemplo
+
+https://github.com/KerfuffleV2/haskell-polysemy-test/blob/3ba61c17f6ff8b91b2cf789deb87ec6e2884bcdb/src/example3/Main.hs
+
+* Limitações
+
+- Ainda não é o mais otimizado possível.
+- Mais passes de otimização no Core.
+- Precisará de:
+  - GHC 8.10.1
+  - Precisa de ~import Polysemy~ nos arquivos que quiser otimizar.
+  - Flags do GHC: ~-O2 -flate-specialize -fplugin=Polysemy.Plugin~
+
+* Tufe
+
+#+BEGIN_CENTER
+🍺
+#+END_CENTER

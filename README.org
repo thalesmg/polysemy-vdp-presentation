@@ -1,0 +1,14 @@
+* polysemy-vdp-presentation
+
+** Requerimentos
+
+*** Melpa
+- ~ox-reveal~
+- ~htmlize~
+
+** Produzir saída
+
+#+BEGIN_SRC
+M-x load-library RET ox-reveal
+C-c C-e R R
+#+END_SRC

@@ -7,7 +7,7 @@ maintainer:          "example@example.com"
 copyright:           "2019 Author name here"
 
 extra-source-files:
-- README.md
+- README.org
 - ChangeLog.md
 
 # Metadata used when publishing your package
@@ -23,6 +23,8 @@ dependencies:
   - base >= 4.7 && < 5
   - polysemy
   - polysemy-plugin
+  - mtl
+  - transformers
 
 ghc-options: -O2 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
 
@@ -42,15 +44,26 @@ library:
   source-dirs: src
 
 executables:
-  polysemy-vdp-presentation-exe:
-    main:                Main.hs
+  ex1: &default-exe
+    main:                ex1.hs
     source-dirs:         app
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
     dependencies:
-    - polysemy-vdp-presentation
+      - polysemy-vdp-presentation
+
+  ex2:
+    <<: *default-exe
+    main: ex2.hs
+
+  ex3:
+    <<: *default-exe
+    main: ex3.hs
+    dependencies:
+      - polysemy-vdp-presentation
+      - random
 
 tests:
   polysemy-vdp-presentation-test:
